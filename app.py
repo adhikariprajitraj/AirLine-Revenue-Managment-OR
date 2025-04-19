@@ -10,6 +10,54 @@ import matplotlib.pyplot as plt
 st.set_page_config(layout="wide")
 st.title("DAVN & EMSR-b Airline Revenue Management")
 
+# --- Description ---
+st.markdown("""
+## Optimizing Seat Allocation to Maximize Airline Revenue
+
+Airlines face a daily challenge: how to best manage limited seat capacity on their flights while
+maximizing revenue. The key lies in offering the right seats, at the right price, to the right customers
+— and knowing when to say no to low-fare bookings in hopes of selling those seats at a higher price
+later.
+
+This is the essence of airline revenue management. Airlines don't just sell one type of ticket — they
+offer multiple fare classes for the same route, ranging from economy saver fares to flexible business
+class tickets. Each fare class has different prices and conditions, and customer demand for these fares
+fluctuates over time.
+
+To make the most out of every flight, airlines use smart optimization techniques to decide:
+- How many seats should be available at each fare level?
+- When should a cheaper fare stop being offered?
+- How can the value of a seat be assessed when multiple itineraries overlap across a network
+of flights?
+
+The EMSR-b rule helps airlines set limits on how many tickets to sell at each price level. It uses
+historical demand data to strike a balance: selling seats early at a lower price versus waiting to sell
+them later at a higher price.
+
+However, in real-world airline operations, things are more complicated. Many customers book trips
+that involve multiple connecting flights, and a seat on one leg of a journey may be shared across
+many different itineraries.
+
+To handle this, our approach uses a method called Displacement Adjusted Virtual Nesting (DAVN).
+This method helps airlines make smarter decisions by considering the entire flight network. It
+estimates the true revenue value of each ticket, accounting for the opportunity cost of assigning a
+seat to one itinerary instead of another.
+
+Using a combination of:
+- Linear programming to optimize revenue across the network, and
+- Seat-allocation principles based on pricing and demand to manage booking decisions at the
+individual flight level,
+
+...this integrated system enables airlines to manage bookings in a way that is both strategically
+optimal and operationally practical.
+
+### The Big Picture
+
+This solution gives airlines a powerful tool to improve profitability without adding more flights or
+seats. By making informed booking decisions backed by optimization models, airlines can increase
+revenue, manage uncertainty in demand, and better utilize their limited capacity.
+""")
+
 # --- Core Functions ---
 def leg_finder(product_idx, product_to_legs):
     legs = product_to_legs[product_idx - 1]
@@ -92,6 +140,39 @@ product_to_legs = np.array([
 ])
 
 P, L = len(fare), len(capacity)
+
+# Display input data tables
+st.header("Input Data")
+col1, col2 = st.columns(2)
+
+# Product info table
+product_data = []
+for p in range(1, P+1):
+    legs = leg_finder(p, product_to_legs)
+    leg_str = ", ".join([f"L{l}" for l in legs])
+    product_data.append({
+        "Product": f"P{p}",
+        "Fare": f"${fare[p-1]}",
+        "Demand": demand[p-1],
+        "Legs Used": leg_str
+    })
+    
+with col1:
+    st.subheader("Products")
+    st.dataframe(pd.DataFrame(product_data), use_container_width=True)
+
+# Leg info table
+leg_data = []
+for l in range(1, L+1):
+    leg_data.append({
+        "Leg": f"L{l}",
+        "Capacity": capacity[l-1],
+        "Cancellation Probability": f"{cancel_prob[l-1]:.2f}"
+    })
+    
+with col2:
+    st.subheader("Legs")
+    st.dataframe(pd.DataFrame(leg_data), use_container_width=True)
 
 # --- Main App with Run Button ---
 if st.button("Run Optimization", type="primary"):
