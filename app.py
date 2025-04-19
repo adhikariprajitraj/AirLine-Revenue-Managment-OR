@@ -6,59 +6,8 @@ import pandas as pd
 import pulp
 from scipy.stats import poisson
 import matplotlib.pyplot as plt
+import seaborn as sns
 
-st.set_page_config(layout="wide")
-st.title("DAVN & EMSR-b Airline Revenue Management")
-
-# --- Description ---
-st.markdown("""
-## Optimizing Seat Allocation to Maximize Airline Revenue
-
-Airlines face a daily challenge: how to best manage limited seat capacity on their flights while
-maximizing revenue. The key lies in offering the right seats, at the right price, to the right customers
-— and knowing when to say no to low-fare bookings in hopes of selling those seats at a higher price
-later.
-
-This is the essence of airline revenue management. Airlines don't just sell one type of ticket — they
-offer multiple fare classes for the same route, ranging from economy saver fares to flexible business
-class tickets. Each fare class has different prices and conditions, and customer demand for these fares
-fluctuates over time.
-
-To make the most out of every flight, airlines use smart optimization techniques to decide:
-- How many seats should be available at each fare level?
-- When should a cheaper fare stop being offered?
-- How can the value of a seat be assessed when multiple itineraries overlap across a network
-of flights?
-
-The EMSR-b rule helps airlines set limits on how many tickets to sell at each price level. It uses
-historical demand data to strike a balance: selling seats early at a lower price versus waiting to sell
-them later at a higher price.
-
-However, in real-world airline operations, things are more complicated. Many customers book trips
-that involve multiple connecting flights, and a seat on one leg of a journey may be shared across
-many different itineraries.
-
-To handle this, our approach uses a method called Displacement Adjusted Virtual Nesting (DAVN).
-This method helps airlines make smarter decisions by considering the entire flight network. It
-estimates the true revenue value of each ticket, accounting for the opportunity cost of assigning a
-seat to one itinerary instead of another.
-
-Using a combination of:
-- Linear programming to optimize revenue across the network, and
-- Seat-allocation principles based on pricing and demand to manage booking decisions at the
-individual flight level,
-
-...this integrated system enables airlines to manage bookings in a way that is both strategically
-optimal and operationally practical.
-
-### The Big Picture
-
-This solution gives airlines a powerful tool to improve profitability without adding more flights or
-seats. By making informed booking decisions backed by optimization models, airlines can increase
-revenue, manage uncertainty in demand, and better utilize their limited capacity.
-""")
-
-# --- Core Functions ---
 def leg_finder(product_idx, product_to_legs):
     legs = product_to_legs[product_idx - 1]
     return [leg for leg in legs if leg > 0]
@@ -73,11 +22,12 @@ def emsr(fares, demand, cancel_prob, capacity):
         total_d += demand[j]
         total_wf += fares[j] * demand[j]
         agg_d[j] = total_d
-        agg_f[j] = total_wf / total_d
+        agg_f[j] = total_wf / total_d if total_d > 0 else 0
     prot = np.zeros(n)
     for i in range(1, n):
-        frac = (agg_f[i] - fares[i - 1]) / agg_f[i]
-        prot[i] = poisson.ppf(frac, agg_d[i])
+        if agg_f[i] > fares[i - 1]:
+            frac = (agg_f[i] - fares[i - 1]) / agg_f[i]
+            prot[i] = poisson.ppf(frac, agg_d[i])
     prot[0] = 0.0
     C = capacity / (1 - cancel_prob)
     bl = np.maximum(C - prot, 0)
@@ -123,6 +73,81 @@ def davn_generator(shadow_prices, fare, product_to_legs):
             davn[p-1, l-1] = fare[p-1] - ψ + shadow_prices[l-1]
     return davn
 
+def plot_davn_heatmap(davn_data):
+    # Create a copy to avoid modifying the original
+    davn_copy = davn_data.copy()
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Create a mask for the -1 values
+    mask = davn_copy == -1
+    
+    # Create heatmap with custom colormap
+    sns.heatmap(
+        davn_copy, 
+        annot=True, 
+        fmt='.0f',
+        mask=mask,
+        cmap='viridis',
+        linewidths=.5, 
+        ax=ax,
+        cbar_kws={'label': 'Virtual Fare ($)'}
+    )
+    
+    ax.set_title('DAVN Bid-Price Matrix', fontsize=16)
+    plt.tight_layout()
+    
+    return fig
+
+def plot_booking_limits(booking_data):
+    legs = sorted(booking_data['Leg'].unique())
+    
+    if len(legs) == 1:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        axs = [ax]  # Put the single axis in a list for consistent handling
+    else:
+        fig, axs = plt.subplots(len(legs), 1, figsize=(10, 4*len(legs)))
+        if len(legs) > 1:
+            axs = axs.flatten()  # Ensure axs is always an array
+    
+    for i, leg in enumerate(legs):
+        leg_data = booking_data[booking_data['Leg'] == leg].copy()
+        
+        # Sort by Virtual Fare
+        leg_data = leg_data.sort_values('Virtual Fare')
+        
+        # Create the bar chart
+        bars = axs[i].bar(
+            ["P" + str(p) for p in leg_data['Product']],
+            leg_data['Booking Limit'],
+            color='skyblue'
+        )
+        
+        # Add virtual fare labels
+        for j, bar in enumerate(bars):
+            height = bar.get_height()
+            axs[i].text(
+                bar.get_x() + bar.get_width()/2.,
+                height + 5,
+                f"${leg_data['Virtual Fare'].iloc[j]}",
+                ha='center', va='bottom',
+                rotation=0,
+                fontsize=9
+            )
+        
+        axs[i].set_title(f'Leg {leg} Booking Limits', fontsize=14)
+        axs[i].set_xlabel('Products')
+        axs[i].set_ylabel('Booking Limit')
+        axs[i].grid(axis='y', alpha=0.3)
+        
+        # Add capacity line
+        capacity_value = capacity[leg-1]
+        axs[i].axhline(y=capacity_value, color='r', linestyle='-', alpha=0.7)
+        axs[i].text(0, capacity_value+2, f"Capacity: {capacity_value}", color='r')
+    
+    plt.tight_layout()
+    return fig
+
 # --- Data from your .m files ---
 fare = np.array([350,375,400,430,450,500,600,610,620,630,640,650,
                  500,525,550,585,600,650,750,760,770,780,790,800])
@@ -141,103 +166,206 @@ product_to_legs = np.array([
 
 P, L = len(fare), len(capacity)
 
-# Display input data tables
-st.header("Input Data")
-col1, col2 = st.columns(2)
+if __name__ == "__main__":
+    # Set up session state to track app state
+    if "optimization_run" not in st.session_state:
+        st.session_state.optimization_run = False
+    if "show_viz" not in st.session_state:
+        st.session_state.show_viz = False
+    if "show_input" not in st.session_state:
+        st.session_state.show_input = False
 
-# Product info table
-product_data = []
-for p in range(1, P+1):
-    legs = leg_finder(p, product_to_legs)
-    leg_str = ", ".join([f"L{l}" for l in legs])
-    product_data.append({
-        "Product": f"P{p}",
-        "Fare": f"${fare[p-1]}",
-        "Demand": demand[p-1],
-        "Legs Used": leg_str
-    })
-    
-with col1:
-    st.subheader("Products")
-    st.dataframe(pd.DataFrame(product_data), use_container_width=True)
+    def run_optimization():
+        st.session_state.optimization_run = True
+        st.session_state.show_viz = False
 
-# Leg info table
-leg_data = []
-for l in range(1, L+1):
-    leg_data.append({
-        "Leg": f"L{l}",
-        "Capacity": capacity[l-1],
-        "Cancellation Probability": f"{cancel_prob[l-1]:.2f}"
-    })
-    
-with col2:
-    st.subheader("Legs")
-    st.dataframe(pd.DataFrame(leg_data), use_container_width=True)
-
-# --- Main App with Run Button ---
-if st.button("Run Optimization", type="primary"):
-    # Solve LP
-    x_opt, obj = solve_primal(fare, demand, capacity, product_to_legs)
-    v_opt = solve_dual(fare, demand, capacity, product_to_legs)
-    
-    # Generate DAVN bid prices
-    davn = davn_generator(v_opt, fare, product_to_legs)
-    
-    # Display DAVN Matrix
-    st.header("DAVN Bid-Price Matrix")
-    df_davn = pd.DataFrame(
-        davn,
-        index=[f"P{p}" for p in range(1, P+1)],
-        columns=[f"L{l}" for l in range(1, L+1)]
-    )
-    st.dataframe(df_davn.round(0), use_container_width=True)
-    
-    # Identify products on each leg
-    leg_products = {
-        l: sorted([p for p in range(1, P+1) if l in leg_finder(p, product_to_legs)])
-        for l in range(1, L+1)
-    }
-    
-    # Calculate sorted fares and demands for each leg
-    leg_fare_dict = {}
-    leg_demand_dict = {}
-    
-    for l in range(1, L+1):
-        prods = leg_products[l]
-        leg_fare_dict[l] = [davn[p-1, l-1] for p in prods]
-        leg_demand_dict[l] = [demand[p-1] for p in prods]
+    def show_visualizations():
+        st.session_state.show_viz = True
         
-        # Sort by fare
-        sorted_indices = np.argsort(leg_fare_dict[l])
-        leg_fare_dict[l] = np.array(leg_fare_dict[l])[sorted_indices]
-        leg_demand_dict[l] = np.array(leg_demand_dict[l])[sorted_indices]
-        leg_products[l] = np.array(leg_products[l])[sorted_indices]
+    def toggle_input_data():
+        st.session_state.show_input = not st.session_state.show_input
+
+    st.set_page_config(layout="wide")
+    st.title("DAVN & EMSR-b Airline Revenue Management")
+
+    # --- Description ---
+    st.markdown("""
+    ## Optimizing Seat Allocation to Maximize Airline Revenue
+
+    Airlines face a daily challenge: how to best manage limited seat capacity on their flights while
+    maximizing revenue. The key lies in offering the right seats, at the right price, to the right customers
+    — and knowing when to say no to low-fare bookings in hopes of selling those seats at a higher price
+    later.
+
+    This is the essence of airline revenue management. Airlines don't just sell one type of ticket — they
+    offer multiple fare classes for the same route, ranging from economy saver fares to flexible business
+    class tickets. Each fare class has different prices and conditions, and customer demand for these fares
+    fluctuates over time.
+
+    To make the most out of every flight, airlines use smart optimization techniques to decide:
+    - How many seats should be available at each fare level?
+    - When should a cheaper fare stop being offered?
+    - How can the value of a seat be assessed when multiple itineraries overlap across a network
+    of flights?
+
+    The EMSR-b rule helps airlines set limits on how many tickets to sell at each price level. It uses
+    historical demand data to strike a balance: selling seats early at a lower price versus waiting to sell
+    them later at a higher price.
+
+    However, in real-world airline operations, things are more complicated. Many customers book trips
+    that involve multiple connecting flights, and a seat on one leg of a journey may be shared across
+    many different itineraries.
+
+    To handle this, our approach uses a method called Displacement Adjusted Virtual Nesting (DAVN).
+    This method helps airlines make smarter decisions by considering the entire flight network. It
+    estimates the true revenue value of each ticket, accounting for the opportunity cost of assigning a
+    seat to one itinerary instead of another.
+
+    Using a combination of:
+    - Linear programming to optimize revenue across the network, and
+    - Seat-allocation principles based on pricing and demand to manage booking decisions at the
+    individual flight level,
+
+    ...this integrated system enables airlines to manage bookings in a way that is both strategically
+    optimal and operationally practical.
+
+    ### The Big Picture
+
+    This solution gives airlines a powerful tool to improve profitability without adding more flights or
+    seats. By making informed booking decisions backed by optimization models, airlines can increase
+    revenue, manage uncertainty in demand, and better utilize their limited capacity.
+    """)
+
+    # Add button to show/hide input data
+    st.button("Show/Hide Input Data", on_click=toggle_input_data)
     
-    # Calculate booking limits for each leg and create the combined table
-    st.header("Booking Limits by Leg")
-    
-    # Prepare data for the combined table
-    all_rows = []
-    
-    for l in range(1, L+1):
-        vf = leg_fare_dict[l]
-        md = leg_demand_dict[l]
-        bl = emsr(vf, md, cancel_prob[l-1], capacity[l-1])
+    # Display input data if toggled
+    if st.session_state.show_input:
+        st.header("Input Data")
         
-        for i, p in enumerate(leg_products[l]):
-            all_rows.append({
-                "Leg": l,
-                "Product": p,
-                "Virtual Fare": int(vf[i]),
-                "Booking Limit": bl[i]
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Product Fares ($)")
+            df_fare = pd.DataFrame({
+                'Product': [f'P{i+1}' for i in range(P)],
+                'Fare ($)': fare
             })
-    
-    # Create and display table
-    booking_table = pd.DataFrame(all_rows)
-    st.dataframe(booking_table, use_container_width=True)
-    
-    # Display profit information
-    st.markdown(f"### Revenue Information")
-    st.markdown(f"**Upper bound on profit from LP**: ${obj:.0f}")
-else:
-    st.info("Click the 'Run Optimization' button to calculate DAVN bid prices and booking limits.")
+            st.dataframe(df_fare, use_container_width=True)
+            
+            st.subheader("Leg Capacity")
+            df_capacity = pd.DataFrame({
+                'Leg': [f'L{i+1}' for i in range(L)],
+                'Capacity': capacity
+            })
+            st.dataframe(df_capacity, use_container_width=True)
+        
+        with col2:
+            st.subheader("Product Demand (expected bookings)")
+            df_demand = pd.DataFrame({
+                'Product': [f'P{i+1}' for i in range(P)],
+                'Demand': demand
+            })
+            st.dataframe(df_demand, use_container_width=True)
+            
+            st.subheader("Leg Cancellation Probability")
+            df_cancel = pd.DataFrame({
+                'Leg': [f'L{i+1}' for i in range(L)],
+                'Cancellation Probability': cancel_prob
+            })
+            st.dataframe(df_cancel, use_container_width=True)
+        
+        st.subheader("Product-to-Legs Mapping")
+        df_mapping = pd.DataFrame({
+            'Product': [f'P{p+1}' for p in range(P)],
+            'Legs Used': [', '.join([f'L{leg}' for leg in leg_finder(p+1, product_to_legs)]) for p in range(P)]
+        })
+        st.dataframe(df_mapping, use_container_width=True)
+
+    # --- Main App with Run Button ---
+    st.button("Run Optimization", type="primary", on_click=run_optimization)
+
+    # Show results when optimization has been run
+    if st.session_state.optimization_run:
+        # Solve LP
+        x_opt, obj = solve_primal(fare, demand, capacity, product_to_legs)
+        v_opt = solve_dual(fare, demand, capacity, product_to_legs)
+
+        # Generate DAVN bid prices
+        davn = davn_generator(v_opt, fare, product_to_legs)
+
+        # Display DAVN Matrix
+        st.header("DAVN Bid-Price Matrix")
+        df_davn = pd.DataFrame(
+            davn,
+            index=[f"P{p}" for p in range(1, P+1)],
+            columns=[f"L{l}" for l in range(1, L+1)]
+        )
+        st.dataframe(df_davn.round(0), use_container_width=True)
+
+        # Identify products on each leg
+        leg_products = {
+            l: sorted([p for p in range(1, P+1) if l in leg_finder(p, product_to_legs)])
+            for l in range(1, L+1)
+        }
+
+        # Calculate sorted fares and demands for each leg
+        leg_fare_dict = {}
+        leg_demand_dict = {}
+
+        for l in range(1, L+1):
+            prods = leg_products[l]
+            leg_fare_dict[l] = [davn[p-1, l-1] for p in prods]
+            leg_demand_dict[l] = [demand[p-1] for p in prods]
+
+            # Sort by fare
+            sorted_indices = np.argsort(leg_fare_dict[l])
+            leg_fare_dict[l] = np.array(leg_fare_dict[l])[sorted_indices]
+            leg_demand_dict[l] = np.array(leg_demand_dict[l])[sorted_indices]
+            leg_products[l] = np.array(leg_products[l])[sorted_indices]
+
+        # Calculate booking limits for each leg and create the combined table
+        st.header("Booking Limits by Leg")
+
+        # Prepare data for the combined table
+        all_rows = []
+
+        for l in range(1, L+1):
+            vf = leg_fare_dict[l]
+            md = leg_demand_dict[l]
+            bl = emsr(vf, md, cancel_prob[l-1], capacity[l-1])
+
+            for i, p in enumerate(leg_products[l]):
+                all_rows.append({
+                    "Leg": l,
+                    "Product": p,
+                    "Virtual Fare": int(vf[i]),
+                    "Booking Limit": bl[i]
+                })
+
+        # Create and display table
+        booking_table = pd.DataFrame(all_rows)
+        st.dataframe(booking_table, use_container_width=True)
+
+        # Display profit information
+        st.markdown(f"### Revenue Information")
+        st.markdown(f"**Upper bound on profit from LP**: ${obj:.0f}")
+
+        # Add visualization button with session state
+        st.button("Show Visualizations", on_click=show_visualizations)
+
+        # Show visualizations if the button has been clicked
+        if st.session_state.show_viz:
+            st.header("Data Visualizations")
+
+            # DAVN Matrix Heatmap
+            st.subheader("DAVN Bid-Price Matrix Visualization")
+            davn_fig = plot_davn_heatmap(df_davn.values)
+            st.pyplot(davn_fig)
+
+            # Booking Limits Bar Charts
+            st.subheader("Booking Limits by Leg")
+            bl_fig = plot_booking_limits(booking_table)
+            st.pyplot(bl_fig)
+    else:
+        st.info("Click the 'Run Optimization' button to calculate DAVN bid prices and booking limits.")
