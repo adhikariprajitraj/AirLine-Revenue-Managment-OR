@@ -7,6 +7,8 @@ import pulp
 from scipy.stats import poisson
 import matplotlib.pyplot as plt
 import seaborn as sns
+from PIL import Image
+import os
 
 def leg_finder(product_idx, product_to_legs):
     legs = product_to_legs[product_idx - 1]
@@ -228,7 +230,58 @@ if __name__ == "__main__":
 
     ...this integrated system enables airlines to manage bookings in a way that is both strategically
     optimal and operationally practical.
-
+    """)
+    
+    # Display the image using Streamlit's image display instead of markdown
+    try:
+        # Check if file exists
+        image_path = "figure.png"
+        if os.path.exists(image_path):
+            st.image(image_path, caption="A figure showing a network of four cities where Chicago serves as the hub and Denver, Miami, and Boston serve as the spokes")
+        else:
+            st.error(f"Image file not found at: {image_path}")
+            
+            # Option to create the image - this will display if the image is missing
+            st.warning("The hub and spoke network image is missing. Would you like to create a simple visualization?")
+            if st.button("Generate Hub and Spoke Network Visualization"):
+                # Create a simple hub and spoke network visualization
+                fig, ax = plt.subplots(figsize=(10, 8))
+                
+                # Define city positions (x, y)
+                cities = {
+                    "Chicago": (0, 0),
+                    "Denver": (-2, 1),
+                    "Miami": (1, -2),
+                    "Boston": (2, 1.5)
+                }
+                
+                # Plot cities as nodes
+                for city, pos in cities.items():
+                    ax.plot(pos[0], pos[1], 'o', markersize=15, color='blue' if city == "Chicago" else 'green')
+                    ax.text(pos[0], pos[1]+0.2, city, ha='center', fontsize=12, fontweight='bold')
+                
+                # Draw connections (spokes)
+                chicago = cities["Chicago"]
+                for city, pos in cities.items():
+                    if city != "Chicago":
+                        ax.plot([chicago[0], pos[0]], [chicago[1], pos[1]], 'r-', linewidth=2)
+                
+                ax.set_title("Hub and Spoke Network", fontsize=16)
+                ax.set_xlim(-3, 3)
+                ax.set_ylim(-3, 2)
+                ax.axis('off')
+                
+                # Save the figure
+                plt.tight_layout()
+                plt.savefig(image_path)
+                
+                # Display the newly created image
+                st.image(image_path, caption="A figure showing a network of four cities where Chicago serves as the hub and Denver, Miami, and Boston serve as the spokes")
+                st.success("Network diagram created successfully!")
+    except Exception as e:
+        st.error(f"Error displaying image: {str(e)}")
+    
+    st.markdown("""
     ### The Big Picture
 
     This solution gives airlines a powerful tool to improve profitability without adding more flights or
