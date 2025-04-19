@@ -204,7 +204,7 @@ st.table(idx1)
 st.subheader("reordered_demand")
 st.table(sorted_dem)
 
-# --- Step 4: Per‑Leg EMSR‐b & Virtual Fares + BL  (match your BL printout) ---
+# --- Step 4: Per‑Leg EMSR‑b & Virtual Fares + BL  (match your BL printout) ---
 st.header("4️⃣ Per‑Leg EMSR‑b Booking Limits (with Virtual Fares)")
 
 for l in range(1, L+1):
