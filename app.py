@@ -15,26 +15,43 @@ def leg_finder(product_idx, product_to_legs):
     return [leg for leg in legs if leg > 0]
 
 def emsr(fares, demand, cancel_prob, capacity):
+    # Sort by virtual fare just in case
+    order = np.argsort(fares)
+    fares = np.array(fares)[order]
+    demand = np.array(demand)[order]
+
     n = len(fares)
+    # 1) Build cumulative demand & weighted fares
     agg_d = np.zeros(n)
     agg_f = np.zeros(n)
-    total_d = total_wf = 0.0
+    tot_d = tot_wf = 0.0
     for i in range(n):
         j = n - 1 - i
-        total_d += demand[j]
-        total_wf += fares[j] * demand[j]
-        agg_d[j] = total_d
-        agg_f[j] = total_wf / total_d if total_d > 0 else 0
+        tot_d  += demand[j]
+        tot_wf += fares[j] * demand[j]
+        agg_d[j] = tot_d
+        agg_f[j] = tot_wf / tot_d if tot_d > 0 else 0
+
+    # 2) Compute protection levels Q_{i+1} in prot[i+1]
     prot = np.zeros(n)
     for i in range(1, n):
         if agg_f[i] > fares[i - 1]:
-            frac = (agg_f[i] - fares[i - 1]) / agg_f[i]
+            frac = (agg_f[i] - fares[i-1]) / agg_f[i]
             prot[i] = poisson.ppf(frac, agg_d[i])
-    prot[0] = 0.0
-    C = capacity / (1 - cancel_prob)
-    bl = np.maximum(C - prot, 0)
-    bl[-1] = C
+    # prot[0] unused
+
+    # 3) Adjust capacity for cancellations
+    C_eff = capacity / (1 - cancel_prob)
+
+    # 4) Booking limits: shift protection by one
+    bl = np.zeros(n)
+    # For classes 1…n−1
+    bl[:-1] = np.maximum(C_eff - prot[1:], 0)
+    # Highest fare has full capacity
+    bl[-1] = C_eff
+
     return np.ceil(bl).astype(int)
+
 
 def solve_primal(fare, demand, capacity, product_to_legs):
     P, L = len(fare), len(capacity)
@@ -70,9 +87,9 @@ def davn_generator(shadow_prices, fare, product_to_legs):
     davn = -np.ones((P, L))
     for p in range(1, P+1):
         legs = leg_finder(p, product_to_legs)
-        ψ = sum(shadow_prices[l-1] for l in legs)
+        psi = sum(shadow_prices[l-1] for l in legs)
         for l in legs:
-            davn[p-1, l-1] = fare[p-1] - ψ + shadow_prices[l-1]
+            davn[p-1, l-1] = fare[p-1] - psi + shadow_prices[l-1]
     return davn
 
 def plot_davn_heatmap(davn_data):
