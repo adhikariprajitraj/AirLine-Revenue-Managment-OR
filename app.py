@@ -53,6 +53,7 @@ def emsr(fares, demand, cancel_prob, capacity):
     return np.ceil(bl).astype(int)
 
 
+
 def solve_primal(fare, demand, capacity, product_to_legs):
     P, L = len(fare), len(capacity)
     prob = pulp.LpProblem("PrimalDAVN", pulp.LpMaximize)
