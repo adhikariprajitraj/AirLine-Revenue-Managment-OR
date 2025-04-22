@@ -52,8 +52,6 @@ def emsr(fares, demand, cancel_prob, capacity):
 
     return np.ceil(bl).astype(int)
 
-
-
 def solve_primal(fare, demand, capacity, product_to_legs):
     P, L = len(fare), len(capacity)
     prob = pulp.LpProblem("PrimalDAVN", pulp.LpMaximize)
@@ -168,23 +166,21 @@ def plot_booking_limits(booking_data):
     plt.tight_layout()
     return fig
 
-# --- Data from your .m files ---
-fare = np.array([350,375,400,430,450,500,600,610,620,630,640,650,
+# --- Default Data values ---
+default_fare = np.array([350,375,400,430,450,500,600,610,620,630,640,650,
                  500,525,550,585,600,650,750,760,770,780,790,800])
-demand = np.array([58.8,67.2,50.4,58.8,67.2,50.4,
+default_demand = np.array([58.8,67.2,50.4,58.8,67.2,50.4,
                    84,100.8,84,75.6,84,58.8,
                    14.7,16.8,12.6,14.7,16.8,12.6,
                    21,25.2,21,18.9,21,14.7])
-capacity = np.array([100,100,100,100,100,100])
-cancel_prob = np.array([0.225,0.2,0.1,0.22,0.15,0.21])
-product_to_legs = np.array([
+default_capacity = np.array([100,100,100,100,100,100])
+default_cancel_prob = np.array([0.225,0.2,0.1,0.22,0.15,0.21])
+default_product_to_legs = np.array([
     [1,-1],[2,-1],[3,-1],[4,-1],[5,-1],[6,-1],
     [2,3],[1,4],[2,5],[1,6],[4,5],[3,6],
     [1,-1],[2,-1],[3,-1],[4,-1],[5,-1],[6,-1],
     [2,3],[1,4],[2,5],[1,6],[4,5],[3,6]
 ])
-
-P, L = len(fare), len(capacity)
 
 if __name__ == "__main__":
     # Set up session state to track app state
@@ -194,6 +190,18 @@ if __name__ == "__main__":
         st.session_state.show_viz = False
     if "show_input" not in st.session_state:
         st.session_state.show_input = False
+        
+    # Initialize data in session state if not present
+    if "fare" not in st.session_state:
+        st.session_state.fare = default_fare.copy()
+    if "demand" not in st.session_state:
+        st.session_state.demand = default_demand.copy()
+    if "capacity" not in st.session_state:
+        st.session_state.capacity = default_capacity.copy()
+    if "cancel_prob" not in st.session_state:
+        st.session_state.cancel_prob = default_cancel_prob.copy()
+    if "product_to_legs" not in st.session_state:
+        st.session_state.product_to_legs = default_product_to_legs.copy()
 
     def run_optimization():
         st.session_state.optimization_run = True
@@ -204,6 +212,14 @@ if __name__ == "__main__":
         
     def toggle_input_data():
         st.session_state.show_input = not st.session_state.show_input
+        
+    def reset_to_defaults():
+        st.session_state.fare = default_fare.copy()
+        st.session_state.demand = default_demand.copy()
+        st.session_state.capacity = default_capacity.copy()
+        st.session_state.cancel_prob = default_cancel_prob.copy()
+        st.session_state.product_to_legs = default_product_to_legs.copy()
+        st.success("Data reset to default values!")
 
     st.set_page_config(layout="wide")
     st.title("DAVN & EMSR-b Airline Revenue Management")
@@ -307,57 +323,133 @@ if __name__ == "__main__":
     revenue, manage uncertainty in demand, and better utilize their limited capacity.
     """)
 
-    # Add button to show/hide input data
-    st.button("Show/Hide Input Data", on_click=toggle_input_data)
+    # Add button to show/hide input data with toggle_input_data callback
+    st.button("Edit Input Data", on_click=toggle_input_data)
     
-    # Display input data if toggled
+    # Get current values from session state for convenience
+    fare = st.session_state.fare
+    demand = st.session_state.demand
+    capacity = st.session_state.capacity
+    cancel_prob = st.session_state.cancel_prob
+    product_to_legs = st.session_state.product_to_legs
+    
+    P, L = len(fare), len(capacity)
+    
+    # Display and edit input data if toggled
     if st.session_state.show_input:
-        st.header("Input Data")
+        st.header("Input Data Editor")
+        st.info("Edit the values directly in the tables below. Changes will be used in the next optimization run.")
         
-        col1, col2 = st.columns(2)
+        # Add reset button
+        st.button("Reset to Default Values", on_click=reset_to_defaults)
         
-        with col1:
-            st.subheader("Product Fares ($)")
-            df_fare = pd.DataFrame({
+        tab1, tab2, tab3 = st.tabs(["Products", "Legs", "Network"])
+        
+        with tab1:
+            # Create editable product data
+            product_data = pd.DataFrame({
                 'Product': [f'P{i+1}' for i in range(P)],
-                'Fare ($)': fare
+                'Fare ($)': fare,
+                'Expected Demand': demand
             })
-            st.dataframe(df_fare, use_container_width=True)
             
-            st.subheader("Leg Capacity")
-            df_capacity = pd.DataFrame({
-                'Leg': [f'L{i+1}' for i in range(L)],
-                'Capacity': capacity
-            })
-            st.dataframe(df_capacity, use_container_width=True)
-        
-        with col2:
-            st.subheader("Product Demand (expected bookings)")
-            df_demand = pd.DataFrame({
-                'Product': [f'P{i+1}' for i in range(P)],
-                'Demand': demand
-            })
-            st.dataframe(df_demand, use_container_width=True)
+            st.subheader("Product Fares and Demand")
+            edited_product_data = st.data_editor(
+                product_data,
+                use_container_width=True,
+                hide_index=True,
+                disabled=["Product"],
+                num_rows="fixed"
+            )
             
-            st.subheader("Leg Cancellation Probability")
-            df_cancel = pd.DataFrame({
+            # Update session state with edited values
+            st.session_state.fare = np.array(edited_product_data['Fare ($)'])
+            st.session_state.demand = np.array(edited_product_data['Expected Demand'])
+            
+        with tab2:
+            # Create editable leg data
+            leg_data = pd.DataFrame({
                 'Leg': [f'L{i+1}' for i in range(L)],
+                'Capacity': capacity,
                 'Cancellation Probability': cancel_prob
             })
-            st.dataframe(df_cancel, use_container_width=True)
-        
-        st.subheader("Product-to-Legs Mapping")
-        df_mapping = pd.DataFrame({
-            'Product': [f'P{p+1}' for p in range(P)],
-            'Legs Used': [', '.join([f'L{leg}' for leg in leg_finder(p+1, product_to_legs)]) for p in range(P)]
-        })
-        st.dataframe(df_mapping, use_container_width=True)
+            
+            st.subheader("Leg Capacity and Cancellation Rates")
+            edited_leg_data = st.data_editor(
+                leg_data, 
+                use_container_width=True,
+                hide_index=True,
+                disabled=["Leg"],
+                num_rows="fixed"
+            )
+            
+            # Update session state with edited values
+            st.session_state.capacity = np.array(edited_leg_data['Capacity'])
+            st.session_state.cancel_prob = np.array(edited_leg_data['Cancellation Probability'])
+            
+        with tab3:
+            st.subheader("Product-to-Legs Mapping")
+            
+            # Create a more human-readable representation of the mapping
+            readable_mapping = []
+            for p in range(P):
+                legs_used = leg_finder(p+1, product_to_legs)
+                readable_mapping.append({
+                    'Product': f'P{p+1}',
+                    'Legs Used': ', '.join([f'L{leg}' for leg in legs_used])
+                })
+            
+            st.dataframe(pd.DataFrame(readable_mapping), use_container_width=True)
+            
+            # Advanced option to edit the raw product_to_legs matrix
+            st.subheader("Advanced: Edit Raw Product-to-Legs Matrix")
+            if st.checkbox("Show advanced network editor"):
+                st.warning("""
+                Use caution when editing this matrix. Each row represents a product.
+                Positive numbers represent legs used by the product, and -1 means no leg.
+                Example: [1, -1] means the product uses only leg 1, while [2, 3] means it uses legs 2 and 3.
+                """)
+                
+                # Convert to string for easier editing
+                ptl_strings = [str(row) for row in product_to_legs]
+                ptl_df = pd.DataFrame({
+                    'Product': [f'P{i+1}' for i in range(P)],
+                    'Legs Matrix': ptl_strings
+                })
+                
+                edited_ptl_df = st.data_editor(
+                    ptl_df,
+                    use_container_width=True,
+                    hide_index=True,
+                    disabled=["Product"],
+                    num_rows="fixed"
+                )
+                
+                # Parse the edited strings back to numpy arrays
+                try:
+                    edited_product_to_legs = np.array([
+                        eval(row_str) for row_str in edited_ptl_df['Legs Matrix']
+                    ])
+                    # Check if the shape is valid
+                    if edited_product_to_legs.shape == product_to_legs.shape:
+                        st.session_state.product_to_legs = edited_product_to_legs
+                    else:
+                        st.error("The shape of the product-to-legs matrix has changed. Please maintain the same format.")
+                except Exception as e:
+                    st.error(f"Error parsing the product-to-legs matrix: {str(e)}. Please check your input format.")
 
     # --- Main App with Run Button ---
     st.button("Run Optimization", type="primary", on_click=run_optimization)
 
     # Show results when optimization has been run
     if st.session_state.optimization_run:
+        # Get current data from session state
+        fare = st.session_state.fare
+        demand = st.session_state.demand
+        capacity = st.session_state.capacity
+        cancel_prob = st.session_state.cancel_prob
+        product_to_legs = st.session_state.product_to_legs
+        
         # Solve LP
         x_opt, obj = solve_primal(fare, demand, capacity, product_to_legs)
         v_opt = solve_dual(fare, demand, capacity, product_to_legs)
