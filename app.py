@@ -102,7 +102,7 @@ def plot_davn_heatmap(davn_data):
     # Create a mask for the -1 values
     mask = davn_copy == -1
     
-    # Create heatmap with custom colormap
+    # Create heatmap with custom colormap and improved annotations
     sns.heatmap(
         davn_copy, 
         annot=True, 
@@ -114,8 +114,18 @@ def plot_davn_heatmap(davn_data):
         cbar_kws={'label': 'Virtual Fare ($)'}
     )
     
-    ax.set_title('DAVN Bid-Price Matrix', fontsize=16)
-    plt.tight_layout()
+    # Add row and column annotations for better understanding
+    ax.set_title('DAVN Bid-Price Matrix\n(Virtual fare value of each product on each leg)', fontsize=16)
+    ax.set_xlabel('Flight Legs', fontsize=12)
+    ax.set_ylabel('Products', fontsize=12)
+    
+    # Add explanation text
+    fig.text(0.5, 0.01, 
+             "Higher values (yellow) indicate more valuable products for a specific leg.\n"
+             "Empty cells (-1) indicate product doesn't use that leg.",
+             ha='center', fontsize=10, style='italic')
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.97])  # Adjust layout to make room for caption
     
     return fig
 
@@ -136,11 +146,19 @@ def plot_booking_limits(booking_data):
         # Sort by Virtual Fare
         leg_data = leg_data.sort_values('Virtual Fare')
         
-        # Create the bar chart
+        # Create color map based on virtual fare values
+        virtual_fares = leg_data['Virtual Fare'].values
+        if len(virtual_fares) > 0:
+            norm = plt.Normalize(min(virtual_fares), max(virtual_fares))
+            colors = plt.cm.coolwarm(norm(virtual_fares))
+        else:
+            colors = 'skyblue'
+        
+        # Create the bar chart with gradient colors
         bars = axs[i].bar(
             ["P" + str(p) for p in leg_data['Product']],
             leg_data['Booking Limit'],
-            color='skyblue'
+            color=colors
         )
         
         # Add virtual fare labels above bars
@@ -163,7 +181,7 @@ def plot_booking_limits(booking_data):
                     height/2,  # Middle of the bar
                     f"{int(leg_data['Booking Limit'].iloc[j])}",
                     ha='center', va='center',
-                    color='black',
+                    color='white' if virtual_fares[j] > np.mean(virtual_fares) else 'black',
                     fontweight='bold',
                     fontsize=10
                 )
@@ -177,8 +195,181 @@ def plot_booking_limits(booking_data):
         capacity_value = capacity[leg-1]
         axs[i].axhline(y=capacity_value, color='r', linestyle='-', alpha=0.7)
         axs[i].text(0, capacity_value+2, f"Capacity: {capacity_value}", color='r')
+        
+        # Add note about color coding
+        if i == 0:
+            axs[i].text(
+                0.5, -0.15,
+                "Color indicates virtual fare value: Blue (lower) to Red (higher)",
+                transform=axs[i].transAxes,
+                ha='center', fontsize=9, style='italic'
+            )
     
     plt.tight_layout()
+    return fig
+
+def plot_revenue_distribution(x_opt, fare, obj):
+    """Create a revenue distribution visualization"""
+    
+    # Calculate revenue by product
+    revenue_by_product = x_opt * fare
+    
+    # Sort products by revenue contribution
+    sorted_indices = np.argsort(revenue_by_product)[::-1]  # Descending
+    top_products = sorted_indices[:15]  # Show top 15 products
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Create pie chart of revenue distribution
+    pie_labels = [f'P{i+1}' for i in top_products]
+    pie_values = revenue_by_product[top_products]
+    other_value = sum(revenue_by_product) - sum(pie_values)
+    
+    if other_value > 0:
+        pie_labels.append('Others')
+        pie_values = np.append(pie_values, other_value)
+    
+    # Use a nice color palette
+    colors = plt.cm.viridis(np.linspace(0, 1, len(pie_values)))
+    
+    # Create the pie chart
+    wedges, texts, autotexts = ax1.pie(
+        pie_values, 
+        labels=pie_labels,
+        autopct='%1.1f%%',
+        startangle=90,
+        colors=colors
+    )
+    
+    # Make percentage labels more readable
+    for autotext in autotexts:
+        autotext.set_color('white')
+        autotext.set_fontweight('bold')
+    
+    ax1.set_title('Revenue Distribution by Product', fontsize=14)
+    
+    # Create horizontal bar chart for top revenue products
+    bars = ax2.barh(
+        [f'P{i+1}' for i in top_products[:10]],  # Top 10 for readability
+        revenue_by_product[top_products[:10]],
+        color=colors[:10]
+    )
+    
+    # Add value labels
+    for bar in bars:
+        width = bar.get_width()
+        ax2.text(
+            width + 500,  # Small offset
+            bar.get_y() + bar.get_height()/2,
+            f'${int(width):,}',
+            ha='left', va='center'
+        )
+    
+    ax2.set_xlabel('Revenue ($)')
+    ax2.set_title('Top 10 Products by Revenue Contribution', fontsize=14)
+    
+    # Add total revenue annotation
+    fig.text(0.5, 0.01, f'Total Expected Revenue: ${int(obj):,}', ha='center', fontsize=12, fontweight='bold')
+    
+    plt.tight_layout(rect=[0, 0.05, 1, 0.95])
+    return fig
+
+def plot_demand_vs_capacity(demand, capacity, product_to_legs, fare):
+    """Visualize demand vs. capacity and fare distribution"""
+    
+    # Calculate total demand per leg
+    leg_demand = {}
+    for l in range(1, len(capacity)+1):
+        products_on_leg = [j for j in range(len(demand)) if l in leg_finder(j+1, product_to_legs)]
+        leg_demand[l] = sum(demand[j] for j in products_on_leg)
+    
+    # Set up figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # 1. Demand vs Capacity Chart
+    leg_nums = list(leg_demand.keys())
+    demand_values = [leg_demand[l] for l in leg_nums]
+    capacity_values = [capacity[l-1] for l in leg_nums]
+    
+    # Create bar positions
+    x = np.arange(len(leg_nums))
+    width = 0.35
+    
+    # Plot bars
+    demand_bars = ax1.bar(x - width/2, demand_values, width, label='Expected Demand', color='skyblue')
+    capacity_bars = ax1.bar(x + width/2, capacity_values, width, label='Capacity', color='lightcoral')
+    
+    # Add value labels on bars
+    for bar in demand_bars + capacity_bars:
+        height = bar.get_height()
+        ax1.annotate(f'{int(height)}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3),  # 3 points vertical offset
+                    textcoords="offset points",
+                    ha='center', va='bottom')
+    
+    # Add capacity utilization percentage
+    for i, l in enumerate(leg_nums):
+        utilization = (leg_demand[l] / capacity[l-1]) * 100
+        ax1.text(i, 0, f"{utilization:.1f}%", ha='center', va='bottom', 
+                fontsize=9, fontweight='bold', color='darkblue',
+                bbox=dict(boxstyle='round,pad=0.3', fc='white', alpha=0.7))
+    
+    # Customize plot
+    ax1.set_title('Demand vs. Capacity by Leg', fontsize=14)
+    ax1.set_xlabel('Leg')
+    ax1.set_ylabel('Number of Seats')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels([f'Leg {l}' for l in leg_nums])
+    ax1.legend()
+    ax1.grid(axis='y', alpha=0.3)
+    
+    # 2. Fare Distribution Analysis
+    # Calculate statistics for fare distribution by leg
+    fare_stats = {}
+    for l in range(1, len(capacity)+1):
+        products_on_leg = [j for j in range(len(fare)) if l in leg_finder(j+1, product_to_legs)]
+        if products_on_leg:
+            fares_on_leg = fare[products_on_leg]
+            fare_stats[l] = {
+                'min': np.min(fares_on_leg),
+                'max': np.max(fares_on_leg),
+                'avg': np.mean(fares_on_leg),
+                'median': np.median(fares_on_leg)
+            }
+    
+    # Create box plot for fare distribution
+    boxplot_data = [fare[
+        [j for j in range(len(fare)) if l in leg_finder(j+1, product_to_legs)]
+    ] for l in leg_nums]
+    
+    ax2.boxplot(boxplot_data, patch_artist=True, 
+                boxprops=dict(facecolor='lightgreen', alpha=0.8),
+                medianprops=dict(color='darkred'),
+                flierprops=dict(marker='o', markerfacecolor='red', markersize=5))
+    
+    # Customize plot
+    ax2.set_title('Fare Distribution by Leg', fontsize=14)
+    ax2.set_xlabel('Leg')
+    ax2.set_ylabel('Fare Value ($)')
+    ax2.set_xticklabels([f'Leg {l}' for l in leg_nums])
+    ax2.grid(axis='y', alpha=0.3)
+    
+    # Add annotations for key statistics
+    for i, l in enumerate(leg_nums):
+        if l in fare_stats:
+            stats = fare_stats[l]
+            y_pos = stats['min'] - 50
+            ax2.annotate(f"Avg: ${stats['avg']:.0f}\nRange: ${stats['max'] - stats['min']:.0f}",
+                        xy=(i+1, y_pos),
+                        ha='center', fontsize=8,
+                        bbox=dict(boxstyle='round,pad=0.3', fc='white', alpha=0.7))
+    
+    # Add overall insights
+    average_util = sum(leg_demand[l] / capacity[l-1] for l in leg_nums) / len(leg_nums) * 100
+    fig.suptitle(f'Capacity Utilization Analysis (Avg: {average_util:.1f}%)', fontsize=16)
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     return fig
 
 # --- Data from your .m files ---
@@ -225,42 +416,26 @@ if __name__ == "__main__":
     st.markdown("""
     ## Optimizing Seat Allocation to Maximize Airline Revenue
 
-    Airlines face a daily challenge: how to best manage limited seat capacity on their flights while
-    maximizing revenue. The key lies in offering the right seats, at the right price, to the right customers
-    — and knowing when to say no to low-fare bookings in hopes of selling those seats at a higher price
-    later.
+    Airlines face a daily challenge: how to best manage limited seat capacity on their flights while maximizing revenue. The key lies in offering the right seats, at the right price, to the right customers — and knowing when to say no to low-fare bookings in hopes of selling those seats at a higher price later.
 
-    This is the essence of airline revenue management. Airlines don't just sell one type of ticket — they
-    offer multiple fare classes for the same route, ranging from economy saver fares to flexible business
-    class tickets. Each fare class has different prices and conditions, and customer demand for these fares
-    fluctuates over time.
+    This is the essence of airline revenue management. Airlines don't just sell one type of ticket — they offer multiple fare classes for the same route, ranging from economy saver fares to flexible business class tickets. Each fare class has different prices and conditions, and customer demand for these fares fluctuates over time.
 
     To make the most out of every flight, airlines use smart optimization techniques to decide:
     - How many seats should be available at each fare level?
     - When should a cheaper fare stop being offered?
-    - How can the value of a seat be assessed when multiple itineraries overlap across a network
-    of flights?
+    - How can the value of a seat be assessed when multiple itineraries overlap across  network of flights?
 
-    The EMSR-b rule helps airlines set limits on how many tickets to sell at each price level. It uses
-    historical demand data to strike a balance: selling seats early at a lower price versus waiting to sell
-    them later at a higher price.
+    The EMSR-b rule helps airlines set limits on how many tickets to sell at each price level. It uses historical demand data to strike a balance: selling seats early at a lower price versus waiting to sell them later at a higher price.
 
-    However, in real-world airline operations, things are more complicated. Many customers book trips
-    that involve multiple connecting flights, and a seat on one leg of a journey may be shared across
-    many different itineraries.
+    However, in real-world airline operations, things are more complicated. Many customers book trips that involve multiple connecting flights, and a seat on one leg of a journey may be shared across many different itineraries.
 
-    To handle this, our approach uses a method called Displacement Adjusted Virtual Nesting (DAVN).
-    This method helps airlines make smarter decisions by considering the entire flight network. It
-    estimates the true revenue value of each ticket, accounting for the opportunity cost of assigning a
-    seat to one itinerary instead of another.
+    To handle this, our approach uses a method called Displacement Adjusted Virtual Nesting (DAVN). This method helps airlines make smarter decisions by considering the entire flight network. It estimates the true revenue value of each ticket, accounting for the opportunity cost of assigning a seat to one itinerary instead of another.
 
     Using a combination of:
     - Linear programming to optimize revenue across the network, and
-    - Seat-allocation principles based on pricing and demand to manage booking decisions at the
-    individual flight level,
+    - Seat-allocation principles based on pricing and demand to manage booking decisions at the individual flight level,
 
-    ...this integrated system enables airlines to manage bookings in a way that is both strategically
-    optimal and operationally practical.
+    This integrated system enables airlines to manage bookings in a way that is both strategically optimal and operationally practical.
     """)
     
     # Display the image using Streamlit's image display instead of markdown
@@ -441,15 +616,71 @@ if __name__ == "__main__":
         # Show visualizations if the button has been clicked
         if st.session_state.show_viz:
             st.header("Data Visualizations")
-
-            # DAVN Matrix Heatmap
-            st.subheader("DAVN Bid-Price Matrix Visualization")
-            davn_fig = plot_davn_heatmap(df_davn.values)
-            st.pyplot(davn_fig)
-
-            # Booking Limits Bar Charts
-            st.subheader("Booking Limits by Leg")
-            bl_fig = plot_booking_limits(booking_table)
-            st.pyplot(bl_fig)
+            
+            # Create tabs for different visualizations
+            viz_tabs = st.tabs([
+                "Booking Limits", 
+                "DAVN Matrix", 
+                "Revenue Distribution", 
+                "Demand Analysis"
+            ])
+            
+            with viz_tabs[0]:
+                # Booking Limits Bar Charts
+                st.subheader("Booking Limits by Leg")
+                bl_fig = plot_booking_limits(booking_table)
+                st.pyplot(bl_fig)
+                
+                st.markdown("""
+                **Understanding this visualization:**
+                - Each bar represents the booking limit for a product on this leg
+                - The number inside the bar is the actual booking limit
+                - The color of the bar indicates the virtual fare value (blue = lower, red = higher)
+                - The red line indicates the physical capacity of the flight
+                """)
+            
+            with viz_tabs[1]:
+                # DAVN Matrix Heatmap
+                st.subheader("DAVN Bid-Price Matrix Visualization")
+                davn_fig = plot_davn_heatmap(df_davn.values)
+                st.pyplot(davn_fig)
+                
+                st.markdown("""
+                **Understanding this visualization:**
+                - This heatmap shows the virtual fare value for each product (rows) on each leg (columns)
+                - Higher values (yellow) indicate more valuable products for that leg
+                - Empty cells (white) indicate the product doesn't use that leg
+                - Virtual fares are calculated using displacement-adjusted bid prices
+                """)
+            
+            with viz_tabs[2]:
+                # Revenue Distribution Visualization
+                st.subheader("Revenue Distribution Analysis")
+                rev_fig = plot_revenue_distribution(x_opt, fare, obj)
+                st.pyplot(rev_fig)
+                
+                st.markdown("""
+                **Understanding this visualization:**
+                - The pie chart shows the distribution of revenue across products
+                - The bar chart shows the top products by revenue contribution
+                - Products with higher revenue contribution are more critical to overall profitability
+                """)
+            
+            with viz_tabs[3]:
+                # Demand vs Capacity Analysis
+                st.subheader("Demand and Capacity Analysis")
+                demand_fig = plot_demand_vs_capacity(demand, capacity, product_to_legs, fare)
+                st.pyplot(demand_fig)
+                
+                st.markdown("""
+                **Understanding this visualization:**
+                - Left chart: Compares expected demand against capacity for each leg
+                  - Percentages show capacity utilization (demand/capacity)
+                - Right chart: Shows fare distribution for products on each leg
+                  - Box plots show min/max, median, and quartiles
+                  - Annotations show average fare and fare range
+                - High utilization legs (near or above 100%) are potential bottlenecks
+                - Legs with wider fare ranges offer more opportunities for revenue optimization
+                """)
     else:
         st.info("Click the 'Run Optimization' button to calculate DAVN bid prices and booking limits.")
