@@ -143,9 +143,10 @@ def plot_booking_limits(booking_data):
             color='skyblue'
         )
         
-        # Add virtual fare labels
+        # Add virtual fare labels above bars
         for j, bar in enumerate(bars):
             height = bar.get_height()
+            # Add virtual fare above the bar
             axs[i].text(
                 bar.get_x() + bar.get_width()/2.,
                 height + 5,
@@ -154,6 +155,18 @@ def plot_booking_limits(booking_data):
                 rotation=0,
                 fontsize=9
             )
+            
+            # Add booking limit inside the bar
+            if height > 0:  # Only add text if the bar is tall enough
+                axs[i].text(
+                    bar.get_x() + bar.get_width()/2.,
+                    height/2,  # Middle of the bar
+                    f"{int(leg_data['Booking Limit'].iloc[j])}",
+                    ha='center', va='center',
+                    color='black',
+                    fontweight='bold',
+                    fontsize=10
+                )
         
         axs[i].set_title(f'Leg {leg} Booking Limits', fontsize=14)
         axs[i].set_xlabel('Products')
