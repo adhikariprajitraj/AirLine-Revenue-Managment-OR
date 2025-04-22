@@ -372,7 +372,7 @@ def plot_demand_vs_capacity(demand, capacity, product_to_legs, fare):
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     return fig
 
-# --- Data from your .m files ---
+# data we have
 fare = np.array([350,375,400,430,450,500,600,610,620,630,640,650,
                  500,525,550,585,600,650,750,760,770,780,790,800])
 demand = np.array([58.8,67.2,50.4,58.8,67.2,50.4,
