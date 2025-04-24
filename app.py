@@ -33,22 +33,31 @@ def emsr(fares, demand, cancel_prob, capacity):
         agg_f[j] = tot_wf / tot_d if tot_d > 0 else 0
 
     # 2) Compute protection levels Q_{i+1} in prot[i+1]
-    prot = np.zeros(n)
+    prot = np.zeros(n + 1)  # Add one extra element for proper indexing
     for i in range(1, n):
         if agg_f[i] > fares[i - 1]:
             frac = (agg_f[i] - fares[i-1]) / agg_f[i]
             prot[i] = poisson.ppf(frac, agg_d[i])
-    # prot[0] unused
+    # prot[0] and prot[n] are unused
 
     # 3) Adjust capacity for cancellations
     C_eff = capacity / (1 - cancel_prob)
 
-    # 4) Booking limits: shift protection by one
+    # 4) Booking limits: correctly shift protection by one
     bl = np.zeros(n)
-    # For classes 1…n−1
-    bl[:-1] = np.maximum(C_eff - prot[1:], 0)
+    
+    # For the lowest fare class - it should get C - protection level for next class
+    # which is prot[1] for the lowest class
+    if n > 0:
+        bl[0] = np.maximum(C_eff - prot[1], 0)
+    
+    # For classes 2...n-1
+    for i in range(1, n-1):
+        bl[i] = np.maximum(C_eff - prot[i+1], 0)
+        
     # Highest fare has full capacity
-    bl[-1] = C_eff
+    if n > 0:
+        bl[n-1] = C_eff
 
     return np.ceil(bl).astype(int)
 
@@ -88,7 +97,9 @@ def davn_generator(shadow_prices, fare, product_to_legs):
         legs = leg_finder(p, product_to_legs)
         psi = sum(shadow_prices[l-1] for l in legs)
         for l in legs:
-            davn[p-1, l-1] = fare[p-1] - psi + shadow_prices[l-1]
+            # Calculate virtual fare and ensure it's positive
+            virtual_fare = fare[p-1] - psi + shadow_prices[l-1]
+            davn[p-1, l-1] = max(virtual_fare, 0)  # Ensure non-negative value
     return davn
 
 def plot_davn_heatmap(davn_data):
@@ -349,8 +360,8 @@ if __name__ == "__main__":
             # Create editable product data
             product_data = pd.DataFrame({
                 'Product': [f'P{i+1}' for i in range(P)],
-                'Fare ($)': fare,
-                'Expected Demand': demand
+                'Fare ($)': st.session_state.fare,  # Use session state directly
+                'Expected Demand': st.session_state.demand  # Use session state directly
             })
             
             st.subheader("Product Fares and Demand")
@@ -359,19 +370,25 @@ if __name__ == "__main__":
                 use_container_width=True,
                 hide_index=True,
                 disabled=["Product"],
-                num_rows="fixed"
+                num_rows="fixed",
+                key="product_editor"  # Add a unique key
             )
             
-            # Update session state with edited values
-            st.session_state.fare = np.array(edited_product_data['Fare ($)'])
-            st.session_state.demand = np.array(edited_product_data['Expected Demand'])
+            # Update session state with edited values and force rerun if changed
+            new_fare = np.array(edited_product_data['Fare ($)'])
+            new_demand = np.array(edited_product_data['Expected Demand'])
+            
+            if not np.array_equal(new_fare, st.session_state.fare) or not np.array_equal(new_demand, st.session_state.demand):
+                st.session_state.fare = new_fare
+                st.session_state.demand = new_demand
+                st.rerun()  # Replace st.experimental_rerun() with st.rerun()
             
         with tab2:
             # Create editable leg data
             leg_data = pd.DataFrame({
                 'Leg': [f'L{i+1}' for i in range(L)],
-                'Capacity': capacity,
-                'Cancellation Probability': cancel_prob
+                'Capacity': st.session_state.capacity,
+                'Cancellation Probability': st.session_state.cancel_prob
             })
             
             st.subheader("Leg Capacity and Cancellation Rates")
@@ -380,12 +397,18 @@ if __name__ == "__main__":
                 use_container_width=True,
                 hide_index=True,
                 disabled=["Leg"],
-                num_rows="fixed"
+                num_rows="fixed",
+                key="leg_editor"  # Add a unique key
             )
             
-            # Update session state with edited values
-            st.session_state.capacity = np.array(edited_leg_data['Capacity'])
-            st.session_state.cancel_prob = np.array(edited_leg_data['Cancellation Probability'])
+            # Update session state with edited values and force rerun if changed
+            new_capacity = np.array(edited_leg_data['Capacity'])
+            new_cancel_prob = np.array(edited_leg_data['Cancellation Probability'])
+            
+            if not np.array_equal(new_capacity, st.session_state.capacity) or not np.array_equal(new_cancel_prob, st.session_state.cancel_prob):
+                st.session_state.capacity = new_capacity
+                st.session_state.cancel_prob = new_cancel_prob
+                st.rerun()  # Replace st.experimental_rerun() with st.rerun()
             
         with tab3:
             st.subheader("Product-to-Legs Mapping")
