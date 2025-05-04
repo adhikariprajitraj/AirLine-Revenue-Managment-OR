@@ -263,17 +263,6 @@ if __name__ == "__main__":
     ...this integrated system enables airlines to manage bookings in a way that is both strategically optimal and operationally practical.
     """)
 
-    st.markdown("""
-    ### The Big Picture
-
-    This solution gives airlines a powerful tool to improve profitability without adding more flights or seats. By making informed booking decisions backed by optimization models, airlines can increase revenue, manage uncertainty in demand, and better utilize their limited capacity.
-
-    ### For More Information
-
-    For detailed documentation, mathematical formulation, and additional examples, please visit:
-    [Comprehensive Guide to Airline Revenue Management](https://drive.google.com/file/d/1fcJ-CsHlk-2xFqip7stbw29uFcBq4ZFs/view?usp=sharing)
-    """)
-    
     # Display the image using Streamlit's image display instead of markdown
     try:
         # Check if file exists
@@ -323,12 +312,16 @@ if __name__ == "__main__":
     except Exception as e:
         st.error(f"Error displaying image: {str(e)}")
     
+    # Add at the end of the description markdown section
     st.markdown("""
     ### The Big Picture
 
-    This solution gives airlines a powerful tool to improve profitability without adding more flights or
-    seats. By making informed booking decisions backed by optimization models, airlines can increase
-    revenue, manage uncertainty in demand, and better utilize their limited capacity.
+    This solution gives airlines a powerful tool to improve profitability without adding more flights or seats. By making informed booking decisions backed by optimization models, airlines can increase revenue, manage uncertainty in demand, and better utilize their limited capacity.
+
+    ### For More Information
+
+    For detailed documentation, mathematical formulation, and additional examples, please visit:
+    [Comprehensive Guide to Airline Revenue Management](https://drive.google.com/file/d/1fcJ-CsHlk-2xFqip7stbw29uFcBq4ZFs/view?usp=sharing)
     """)
 
     # Add button to show/hide input data with toggle_input_data callback
