@@ -239,42 +239,39 @@ if __name__ == "__main__":
     st.markdown("""
     ## Optimizing Seat Allocation to Maximize Airline Revenue
 
-    Airlines face a daily challenge: how to best manage limited seat capacity on their flights while
-    maximizing revenue. The key lies in offering the right seats, at the right price, to the right customers
-    — and knowing when to say no to low-fare bookings in hopes of selling those seats at a higher price
-    later.
+    Airlines face a daily challenge: how to best manage limited seat capacity on their flights while maximizing revenue. The key lies in offering the right seats, at the right price, to the right customers
+    — and knowing when to say no to low-fare bookings in hopes of selling those seats at a higher price later.
 
-    This is the essence of airline revenue management. Airlines don't just sell one type of ticket — they
-    offer multiple fare classes for the same route, ranging from economy saver fares to flexible business
-    class tickets. Each fare class has different prices and conditions, and customer demand for these fares
-    fluctuates over time.
+    This is the essence of airline revenue management. Airlines don't just sell one type of ticket — they offer multiple fare classes for the same route, ranging from economy saver fares to flexible business class tickets. Each fare class has different prices and conditions, and customer demand for these fares fluctuates over time.
 
     To make the most out of every flight, airlines use smart optimization techniques to decide:
     - How many seats should be available at each fare level?
     - When should a cheaper fare stop being offered?
-    - How can the value of a seat be assessed when multiple itineraries overlap across a network
-    of flights?
+    - How can the value of a seat be assessed when multiple itineraries overlap across a network of flights?
 
-    The EMSR-b rule helps airlines set limits on how many tickets to sell at each price level. It uses
-    historical demand data to strike a balance: selling seats early at a lower price versus waiting to sell
-    them later at a higher price.
+    The EMSR-b rule helps airlines set limits on how many tickets to sell at each price level. It uses historical demand data to strike a balance: selling seats early at a lower price versus waiting to sell them later at a higher price.
 
-    However, in real-world airline operations, things are more complicated. Many customers book trips
-    that involve multiple connecting flights, and a seat on one leg of a journey may be shared across
-    many different itineraries.
+    However, in real-world airline operations, things are more complicated. Many customers book trips that involve multiple connecting flights, and a seat on one leg of a journey may be shared across many different itineraries.
 
-    To handle this, our approach uses a method called Displacement Adjusted Virtual Nesting (DAVN).
-    This method helps airlines make smarter decisions by considering the entire flight network. It
-    estimates the true revenue value of each ticket, accounting for the opportunity cost of assigning a
-    seat to one itinerary instead of another.
+    To handle this, our approach uses a method called Displacement Adjusted Virtual Nesting (DAVN). This method helps airlines make smarter decisions by considering the entire flight network. It estimates the true revenue value of each ticket, accounting for the opportunity cost of assigning a seat to one itinerary instead of another.
 
     Using a combination of:
     - Linear programming to optimize revenue across the network, and
     - Seat-allocation principles based on pricing and demand to manage booking decisions at the
     individual flight level,
 
-    ...this integrated system enables airlines to manage bookings in a way that is both strategically
-    optimal and operationally practical.
+    ...this integrated system enables airlines to manage bookings in a way that is both strategically optimal and operationally practical.
+    """)
+
+    st.markdown("""
+    ### The Big Picture
+
+    This solution gives airlines a powerful tool to improve profitability without adding more flights or seats. By making informed booking decisions backed by optimization models, airlines can increase revenue, manage uncertainty in demand, and better utilize their limited capacity.
+
+    ### For More Information
+
+    For detailed documentation, mathematical formulation, and additional examples, please visit:
+    [Comprehensive Guide to Airline Revenue Management](https://drive.google.com/file/d/1fcJ-CsHlk-2xFqip7stbw29uFcBq4ZFs/view?usp=sharing)
     """)
     
     # Display the image using Streamlit's image display instead of markdown
