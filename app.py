@@ -120,7 +120,8 @@ def plot_davn_heatmap(davn_data):
         cmap='viridis',
         linewidths=.5, 
         ax=ax,
-        cbar_kws={'label': 'Virtual Fare ($)'}
+        cbar_kws={'label': 'Virtual Fare ($)'},
+        yticklabels=[f"P{i+1}" for i in range(davn_copy.shape[0])]  # Add 1-based product labels
     )
     
     ax.set_title('DAVN Bid-Price Matrix', fontsize=16)
