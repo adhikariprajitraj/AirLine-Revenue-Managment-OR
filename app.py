@@ -193,6 +193,10 @@ default_product_to_legs = np.array([
     [1,-1],[2,-1],[3,-1],[4,-1],[5,-1],[6,-1],
     [2,3],[1,4],[2,5],[1,6],[4,5],[3,6]
 ])
+default_seat_class = np.array(['Economy', 'Economy', 'Economy', 'Economy', 'Economy', 'Economy',
+                              'Economy', 'Economy', 'Economy', 'Economy', 'Economy', 'Economy',
+                              'Business', 'Business', 'Business', 'Business', 'Business', 'Business',
+                              'Business', 'Business', 'Business', 'Business', 'Business', 'Business'])
 
 if __name__ == "__main__":
     # Set up session state to track app state
@@ -214,6 +218,8 @@ if __name__ == "__main__":
         st.session_state.cancel_prob = default_cancel_prob.copy()
     if "product_to_legs" not in st.session_state:
         st.session_state.product_to_legs = default_product_to_legs.copy()
+    if "seat_class" not in st.session_state:
+        st.session_state.seat_class = default_seat_class.copy()
 
     def run_optimization():
         st.session_state.optimization_run = True
@@ -231,6 +237,7 @@ if __name__ == "__main__":
         st.session_state.capacity = default_capacity.copy()
         st.session_state.cancel_prob = default_cancel_prob.copy()
         st.session_state.product_to_legs = default_product_to_legs.copy()
+        st.session_state.seat_class = default_seat_class.copy()  # Add this line
         st.success("Data reset to default values!")
 
     st.set_page_config(layout="wide")
@@ -348,11 +355,12 @@ if __name__ == "__main__":
         tab1, tab2, tab3 = st.tabs(["Products", "Legs", "Network"])
         
         with tab1:
-            # Create editable product data
+            # Create editable product data with seat class
             product_data = pd.DataFrame({
                 'Product': [f'P{i+1}' for i in range(P)],
-                'Fare ($)': st.session_state.fare,  # Use session state directly
-                'Expected Demand': st.session_state.demand  # Use session state directly
+                'Fare ($)': st.session_state.fare,
+                'Expected Demand': st.session_state.demand,
+                'Seat Class': st.session_state.seat_class  # Add seat class column
             })
             
             st.subheader("Product Fares and Demand")
@@ -362,17 +370,30 @@ if __name__ == "__main__":
                 hide_index=True,
                 disabled=["Product"],
                 num_rows="fixed",
-                key="product_editor"  # Add a unique key
+                key="product_editor",
+                column_config={
+                    "Seat Class": st.column_config.SelectboxColumn(
+                        "Seat Class",
+                        help="Select the seat class for this product",
+                        width="medium",
+                        options=["Economy", "Business", "First"],
+                        required=True,
+                    )
+                }
             )
             
             # Update session state with edited values and force rerun if changed
             new_fare = np.array(edited_product_data['Fare ($)'])
             new_demand = np.array(edited_product_data['Expected Demand'])
+            new_seat_class = np.array(edited_product_data['Seat Class'])
             
-            if not np.array_equal(new_fare, st.session_state.fare) or not np.array_equal(new_demand, st.session_state.demand):
+            if (not np.array_equal(new_fare, st.session_state.fare) or 
+                not np.array_equal(new_demand, st.session_state.demand) or
+                not np.array_equal(new_seat_class, st.session_state.seat_class)):
                 st.session_state.fare = new_fare
                 st.session_state.demand = new_demand
-                st.rerun()  # Replace st.experimental_rerun() with st.rerun()
+                st.session_state.seat_class = new_seat_class
+                st.rerun()
             
         with tab2:
             # Create editable leg data
